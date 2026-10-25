@@ -168,6 +168,10 @@
         #imageLightbox { flex-direction: column; padding: 0; background: #000; }
         .lightbox-img-wrap { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: auto; touch-action: pan-x pan-y pinch-zoom; }
         #lightboxImage { max-width: 100%; max-height: 100%; object-fit: contain; }
+        
+        .np-dropdown { display:none; position:absolute; z-index:10; background:#fff; border:1px solid #ddd; border-radius: 0 0 6px 6px; width:100%; max-height:200px; overflow-y:auto; box-shadow:0 4px 10px rgba(0,0,0,0.1); margin-top: -2px; }
+        .np-item { padding: 12px 14px; border-bottom: 1px solid #eee; cursor: pointer; font-size: 14px; transition: 0.2s; line-height: 1.3; }
+        .np-item:hover { background: #f8f8f8; color: #b17b44; }
 
         @media (max-width: 768px) {
             .container { margin: 0; border-radius: 0; flex-direction: column; box-shadow: none; padding-bottom: 80px; }
@@ -382,16 +386,45 @@
                 </div>
                 <div class="form-group">
                     <label>Номер телефону *</label>
-                    <input type="tel" id="custPhone" required="" placeholder="+38 (09X) XXX XX XX" maxlength="20">
+                    <input type="tel" id="custPhone" required="" placeholder="+38 (0XX) XXX-XX-XX" oninput="maskPhone(event)" maxlength="19">
                 </div>
+                
                 <div class="form-group">
-                    <label>Населений пункт *</label>
-                    <input type="text" id="custCity" required="" placeholder="м. Київ">
+                    <label>Спосіб доставки *</label>
+                    <div style="display: flex; gap: 15px; margin-top: 5px;">
+                        <label style="font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                            <input type="radio" name="deliveryType" value="np" checked="" onchange="toggleDelivery()"> Нова Пошта
+                        </label>
+                        <label style="font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                            <input type="radio" name="deliveryType" value="up" onchange="toggleDelivery()"> Укрпошта
+                        </label>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Відділення пошти *</label>
-                    <input type="text" id="custPost" required="" placeholder="(напр. НП 15 або укр пошта 62103)">
+
+                <div id="npFields">
+                    <div class="form-group" style="position: relative;">
+                        <label>Місто (Нова Пошта) *</label>
+                        <input type="text" id="npCity" placeholder="Почніть вводити назву міста..." autocomplete="off">
+                        <div id="npCityList" class="np-dropdown"></div>
+                    </div>
+                    <div class="form-group" style="position: relative;">
+                        <label>Відділення / Поштомат *</label>
+                        <input type="text" id="npWarehouse" placeholder="Оберіть місто спочатку..." disabled="" autocomplete="off">
+                        <div id="npWarehouseList" class="np-dropdown"></div>
+                    </div>
                 </div>
+
+                <div id="upFields" style="display:none;">
+                    <div class="form-group">
+                        <label>Населений пункт (Укрпошта) *</label>
+                        <input type="text" id="upCity" placeholder="м. Київ">
+                    </div>
+                    <div class="form-group">
+                        <label>Індекс або номер відділення *</label>
+                        <input type="text" id="upPost" placeholder="(напр. 01001 або відділення 5)">
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label>Коментар (необов'язково)</label>
                     <input type="text" id="custComment" placeholder="Побажання до замовлення">
@@ -444,6 +477,14 @@
     let activeColorName = 'Чорний нубук P4n';
     let activeSize = '';
     let currentSlideIndex = 0;
+
+    let npSelectedCityRef = '';
+
+    function toggleDelivery() {
+        const isNP = document.querySelector('input[name="deliveryType"]:checked').value === 'np';
+        document.getElementById('npFields').style.display = isNP ? 'block' : 'none';
+        document.getElementById('upFields').style.display = isNP ? 'none' : 'block';
+    }
 
     function selectColor(name, key) {
         activeColorKey = key;
@@ -678,6 +719,30 @@
         document.getElementById('imageLightbox').style.display = 'none';
     });
 
+    function maskPhone(e) {
+        const el = e.target;
+        let clearVal = el.value.replace(/\D/g, ''); 
+        
+        if (!clearVal) {
+            el.value = '';
+            return;
+        }
+
+        if (clearVal.startsWith('0')) clearVal = '38' + clearVal;
+        else if (clearVal.startsWith('8')) clearVal = '3' + clearVal;
+        else if (!clearVal.startsWith('38')) clearVal = '380' + clearVal;
+
+        clearVal = clearVal.substring(0, 12); 
+
+        let res = '+38 (';
+        if (clearVal.length > 2) res += clearVal.substring(2, 5);
+        if (clearVal.length > 5) res += ') ' + clearVal.substring(5, 8);
+        if (clearVal.length > 8) res += '-' + clearVal.substring(8, 10);
+        if (clearVal.length > 10) res += '-' + clearVal.substring(10, 12);
+
+        el.value = res;
+    }
+
     // Відправка замовлення на захищений Cloudflare Worker
     function sendFinalOrder(e) {
         e.preventDefault();
@@ -688,11 +753,9 @@
         const firstName = document.getElementById('custFirstName').value.trim();
         const lastName = document.getElementById('custLastName').value.trim();
         const rawPhone = document.getElementById('custPhone').value.trim();
-        const city = document.getElementById('custCity').value.trim();
-        const post = document.getElementById('custPost').value.trim();
         const comment = document.getElementById('custComment').value.trim();
 
-        if (!firstName || !lastName || !rawPhone || !city || !post) {
+        if (!firstName || !lastName || !rawPhone) {
             alert('❌ Будь ласка, заповніть всі обов\'язкові поля!');
             btn.disabled = false;
             btn.innerText = 'Підтвердити замовлення';
@@ -709,29 +772,39 @@
         }
 
         let cleanPhone = rawPhone.replace(/\D/g, ''); 
-        if (cleanPhone.length < 9) {
-            alert('❌ Будь ласка, введіть коректний номер телефону!');
+        if (cleanPhone.length < 12) {
+            alert('❌ Будь ласка, введіть повний номер телефону!');
             btn.disabled = false;
             btn.innerText = 'Підтвердити замовлення';
             return; 
         }
 
-        if (city.length < 3) {
-            alert('❌ Будь ласка, вкажіть повну та коректну назву населеного пункту!');
-            btn.disabled = false;
-            btn.innerText = 'Підтвердити замовлення';
-            return;
-        }
+        const isNP = document.querySelector('input[name="deliveryType"]:checked').value === 'np';
+        let finalCity = '';
+        let finalPost = '';
 
-        if (!/\d/.test(post)) {
-            alert('❌ Будь ласка, вкажіть НОМЕР відділення або поштомату (цифрами)!');
-            document.getElementById('custPost').focus();
-            document.getElementById('custPost').style.borderColor = 'red';
-            btn.disabled = false;
-            btn.innerText = 'Підтвердити замовлення';
-            return;
+        if (isNP) {
+            finalCity = document.getElementById('npCity').value.trim();
+            finalPost = document.getElementById('npWarehouse').value.trim();
+            
+            if (!npSelectedCityRef || !finalPost) {
+                alert('❌ Будь ласка, оберіть місто та відділення Нової Пошти з випадаючого списку!');
+                btn.disabled = false;
+                btn.innerText = 'Підтвердити замовлення';
+                return;
+            }
+            finalCity = '🔴 НОВА ПОШТА | ' + finalCity;
         } else {
-            document.getElementById('custPost').style.borderColor = '#ddd';
+            finalCity = document.getElementById('upCity').value.trim();
+            finalPost = document.getElementById('upPost').value.trim();
+            
+            if (finalCity.length < 3 || finalPost.length < 2) {
+                alert('❌ Будь ласка, вкажіть коректний населений пункт та відділення для Укрпошти!');
+                btn.disabled = false;
+                btn.innerText = 'Підтвердити замовлення';
+                return;
+            }
+            finalCity = '🟡 УКРПОШТА | ' + finalCity;
         }
 
         if (cleanPhone.startsWith('380')) cleanPhone = cleanPhone.substring(2);
@@ -750,8 +823,8 @@
             displayPhone: displayPhone,
             cleanPhone: cleanPhone,
             linkPhone: linkPhone,
-            city: city,
-            post: post,
+            city: finalCity,
+            post: finalPost,
             comment: comment
         };
 
@@ -763,23 +836,25 @@
         .then(res => res.json())
         .then(data => {
             if (data.success) {
-                if(typeof fbq === 'function') fbq('track', 'Purchase', {
-                    value: Number('3850'), 
-                    currency: 'UAH', 
-                    content_name: 'Чоловічі черевики з натуральної шкіри ' + activeColorName
-                });
-                
-                if(window.ttq) {
-                    window.ttq.track('CompletePayment', {
-                        content_type: 'product',
-                        value: Number('3850'),
-                        currency: 'UAH',
-                        contents:[{
-                            content_id: 'para_item',
-                            content_type: 'product',
-                            content_name: 'Чоловічі черевики з натуральної шкіри ' + activeColorName
-                        }]
+                if (!data.isSpam) {
+                    if(typeof fbq === 'function') fbq('track', 'Purchase', {
+                        value: Number('3850'), 
+                        currency: 'UAH', 
+                        content_name: 'Чоловічі черевики з натуральної шкіри ' + activeColorName
                     });
+                    
+                    if(window.ttq) {
+                        window.ttq.track('CompletePayment', {
+                            content_type: 'product',
+                            value: Number('3850'),
+                            currency: 'UAH',
+                            contents:[{
+                                content_id: 'para_item',
+                                content_type: 'product',
+                                content_name: 'Чоловічі черевики з натуральної шкіри ' + activeColorName
+                            }]
+                        });
+                    }
                 }
                 
                 document.getElementById('mainForm').style.display = 'none';
@@ -799,6 +874,104 @@
             btn.innerText = 'Підтвердити замовлення';
         });
     }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const npCityInput = document.getElementById('npCity');
+        const npCityList = document.getElementById('npCityList');
+        const npWarehouseInput = document.getElementById('npWarehouse');
+        const npWarehouseList = document.getElementById('npWarehouseList');
+
+        let cityDebounce;
+        if(npCityInput) {
+            npCityInput.addEventListener('input', function() {
+                clearTimeout(cityDebounce);
+                const val = this.value.trim();
+                npSelectedCityRef = '';
+                npWarehouseInput.value = '';
+                npWarehouseInput.disabled = true;
+                
+                if (val.length < 2) { npCityList.style.display = 'none'; return; }
+                
+                cityDebounce = setTimeout(async () => {
+                    try {
+                        const res = await fetch('https://para-proxy.thecupoftea1000.workers.dev/np', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                calledMethod: "searchSettlements",
+                                methodProperties: { CityName: val, Limit: "50" }
+                            })
+                        });
+                        const data = await res.json();
+                        if (data.success && data.data[0].Addresses.length > 0) {
+                            npCityList.innerHTML = '';
+                            data.data[0].Addresses.forEach(city => {
+                                const div = document.createElement('div');
+                                div.className = 'np-item';
+                                div.textContent = city.Present;
+                                div.onclick = () => {
+                                    npCityInput.value = city.Present;
+                                    npSelectedCityRef = city.DeliveryCity;
+                                    npCityList.style.display = 'none';
+                                    npWarehouseInput.disabled = false;
+                                    npWarehouseInput.placeholder = "Почніть вводити номер або вулицю...";
+                                    npWarehouseInput.focus();
+                                };
+                                npCityList.appendChild(div);
+                            });
+                            npCityList.style.display = 'block';
+                        } else {
+                            npCityList.style.display = 'none';
+                        }
+                    } catch(e) { console.error(e); }
+                }, 300);
+            });
+        }
+
+        let whDebounce;
+        if(npWarehouseInput) {
+            npWarehouseInput.addEventListener('input', function() {
+                clearTimeout(whDebounce);
+                const val = this.value.trim();
+                if (!npSelectedCityRef) return;
+                
+                whDebounce = setTimeout(async () => {
+                    try {
+                        const res = await fetch('https://para-proxy.thecupoftea1000.workers.dev/np', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                calledMethod: "getWarehouses",
+                                methodProperties: { CityRef: npSelectedCityRef, FindByString: val, Limit: "50" }
+                            })
+                        });
+                        const data = await res.json();
+                        if (data.success && data.data.length > 0) {
+                            npWarehouseList.innerHTML = '';
+                            data.data.forEach(wh => {
+                                const div = document.createElement('div');
+                                div.className = 'np-item';
+                                div.textContent = wh.Description;
+                                div.onclick = () => {
+                                    npWarehouseInput.value = wh.Description;
+                                    npWarehouseList.style.display = 'none';
+                                };
+                                npWarehouseList.appendChild(div);
+                            });
+                            npWarehouseList.style.display = 'block';
+                        } else {
+                            npWarehouseList.style.display = 'none';
+                        }
+                    } catch(e) { console.error(e); }
+                }, 300);
+            });
+        }
+
+        document.addEventListener('click', function(e) {
+            if(npCityList && e.target !== npCityInput) npCityList.style.display = 'none';
+            if(npWarehouseList && e.target !== npWarehouseInput) npWarehouseList.style.display = 'none';
+        });
+    });
 
     const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('is-visible'); });
